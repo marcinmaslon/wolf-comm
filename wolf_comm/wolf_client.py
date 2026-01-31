@@ -76,7 +76,7 @@ class WolfClient:
             self.last_session_refesh = datetime.datetime.now() + datetime.timedelta(
                 seconds=60
             )
-            _LOGGER.debug("Session ID: %s extended", self.session_id)
+            print("Session ID: %s extended", self.session_id)
 
         if "json" in kwargs and self.session_id is not None:
             if isinstance(kwargs["json"], dict):

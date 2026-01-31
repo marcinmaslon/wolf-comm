@@ -1,5 +1,9 @@
+from __future__ import annotations
+
 import datetime
+import json
 import logging
+from pathlib import Path
 
 from httpx import AsyncClient
 
@@ -12,6 +16,7 @@ import shortuuid
 
 
 _LOGGER = logging.getLogger(__name__)
+_TOKEN_CACHE_FILE = Path.cwd() / ".wolf_comm_token_cache.json"
 
 
 class Tokens:
@@ -24,15 +29,35 @@ class Tokens:
     def is_expired(self) -> bool:
         return self.expire_date < datetime.datetime.now()
 
+    def to_cache_entry(self) -> dict:
+        return {
+            "access_token": self.access_token,
+            "expire_date": self.expire_date.isoformat(),
+        }
+
+    @classmethod
+    def from_cache_entry(cls, entry: dict) -> "Tokens":
+        expire_date = datetime.datetime.fromisoformat(entry["expire_date"])
+        instance = cls.__new__(cls)
+        instance.access_token = entry["access_token"]
+        instance.expire_date = expire_date
+        return instance
+
 
 class TokenAuth:
-    """Adds poosibility to login with passed credentials"""
+    """Adds poosibility to login with passed credentials and cache tokens locally."""
 
     def __init__(self, username: str, password: str):
         self.username = username
         self.password = password
 
     async def token(self, client: AsyncClient) -> Tokens:
+        cached = self._load_cached_tokens()
+        if cached:
+            if not cached.is_expired():
+                print("Using cached token for user %s", self.username)
+                return cached
+            _LOGGER.info("Cached token for user %s expired, requesting a new one", self.username)
         try:
             # Generate client-sided variables for OpenID
             code_verifier, code_challenge = pkce.generate_pkce_pair()
@@ -103,17 +128,52 @@ class TokenAuth:
                     },
                 )
                         
-                json = r.json()
-                _LOGGER.debug('Token response: %s', json)
-                if "error" in json:
+                token_response = r.json()
+                _LOGGER.debug('Token response: %s', token_response)
+                if "error" in token_response:
                     raise InvalidAuth
                 _LOGGER.info('Successfully authenticated')
-                return Tokens(json.get("access_token"), json.get("expires_in"))
+                tokens = Tokens(token_response.get("access_token"), token_response.get("expires_in"))
+                _LOGGER.info("Caching token that expires at %s", tokens.expire_date.isoformat())
+                self._save_cached_tokens(tokens)
+                return tokens
             else:
                 raise InvalidAuth
         except Exception as e:
             _LOGGER.error('An error occurred: %s', e)
             raise InvalidAuth
+
+    def _load_cached_tokens(self) -> Tokens | None:
+        cache = self._read_cache()
+        entry = cache.get(self.username)
+        if not entry:
+            return None
+        try:
+            print("Loaded cached token entry for %s", self.username)
+            return Tokens.from_cache_entry(entry)
+        except (KeyError, ValueError) as exc:
+            _LOGGER.warning("Invalid cache entry for user %s: %s", self.username, exc)
+            return None
+
+    def _save_cached_tokens(self, tokens: Tokens) -> None:
+        cache = self._read_cache()
+        cache[self.username] = tokens.to_cache_entry()
+        try:
+            print("Saving cached token entry for %s", self.username)
+            _TOKEN_CACHE_FILE.write_text(json.dumps(cache), encoding="utf-8")
+        except OSError as exc:
+            _LOGGER.warning("Failed to write token cache to %s: %s", _TOKEN_CACHE_FILE, exc)
+
+    def _read_cache(self) -> dict:
+        try:
+            raw = _TOKEN_CACHE_FILE.read_text(encoding="utf-8")
+            print("Read token cache file %s (size %d)", _TOKEN_CACHE_FILE, len(raw))
+            return json.loads(raw)
+        except FileNotFoundError:
+            return {}
+        except json.JSONDecodeError as exc:
+            _LOGGER.warning("Failed to parse token cache at %s: %s", _TOKEN_CACHE_FILE, exc)
+            return {}
 
 class InvalidAuth(Exception):
     """Please check whether you entered an invalid username or password. If everything looks fine then probably there is an issue with Wolf SmartSet servers."""
