@@ -149,7 +149,7 @@ def _build_cached_parameters(entries):
 def _build_client():
     credentials = _load_credentials()
     print("Connecting to Wolf")
-    client = wolf_comm.WolfClient(credentials["username"], credentials["password"])
+    client = wolf_comm.WolfClient(credentials["username"], credentials["password"], region="de")
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     return client, loop, credentials
