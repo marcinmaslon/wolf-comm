@@ -59,7 +59,7 @@ class WolfClient:
         self.last_session_refesh = None
         self.regional = None
         self.expert_mode = expert_p if expert_p is not None else False
-        self.region_set = region if region is not None else "en"
+        self.region_set = region if region is not None else "de"
 
     async def __request(self, method: str, path: str, **kwargs) -> Union[dict, list]:
         if self.tokens is None or self.tokens.is_expired():
