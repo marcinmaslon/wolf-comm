@@ -151,3 +151,8 @@ demo.py
 pypirc
 .gitignore
 .pypirc
+
+#credentials
+credentials.json
+system_context_cache.json
+.wolf_comm_token_cache.json
