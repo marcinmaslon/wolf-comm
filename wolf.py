@@ -353,7 +353,7 @@ def _publish_status(status, mqtt_client):
     client = mqtt_client
     _ensure_mqtt_connected(client)
     try:
-        client.publish("wolf/status", json.dumps(status))
+        client.publish("wolf/status", json.dumps(status), retain = True)
     except Exception:
         logging.exception("Failed to publish Wolf status via MQTT")
     finally:
